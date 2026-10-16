@@ -1,0 +1,64 @@
+name: Rebuild unsigned IPA
+
+on:
+  push:
+    branches:
+      - codex/rebuild-ipa-20261016
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: Core/go.sum
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Run contract tests
+        run: ./Tests/run_all_contract_tests.sh
+
+      - name: Build unsigned IPA
+        run: ./build.sh
+
+      - name: Verify and record build
+        run: |
+          unzip -t dist/PaopaoLocationSpoofer-unsigned.ipa
+          shasum -a 256 dist/*.ipa > dist/SHA256SUMS
+          {
+            echo "source_commit=$GITHUB_SHA"
+            echo "source_ref=$GITHUB_REF"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "run_attempt=$GITHUB_RUN_ATTEMPT"
+            xcodebuild -version
+            go version
+            xcodegen --version
+          } > dist/BUILD_INFO.txt
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Location-Spoofer-v1.0.9-unsigned-${{ github.run_id }}
+          path: |
+            dist/*.ipa
+            dist/SHA256SUMS
+            dist/BUILD_INFO.txt
+          if-no-files-found: error
+          retention-days: 7
